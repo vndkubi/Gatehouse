@@ -1,0 +1,44 @@
+# config.local.yaml — MACHINE scope (git-ignored). Written by Settings UI.
+# Example for Ubuntu on WSL2 (Windows host). Secrets never here.
+
+runtime:
+  host: wsl                    # wsl | linux | windows | mac
+  shell: bash
+  node_alias_winpty: false
+
+paths:
+  workspace_root: ~/work
+  repos_dir: ~/work/repos
+  worktrees_dir: ~/work/worktrees
+
+repos:
+  - name: my-service
+    url: https://github.com/my-org/my-service.git
+    branch: main
+    fetch: on-job-start        # manual | on-job-start | every-15m
+
+impl:
+  local_checkout: ~/work/repos/my-service
+
+github:
+  me: my-login
+
+network:
+  https_proxy: ""              # e.g. http://proxy:80
+  no_proxy: "github.com,api.github.com,api.githubcopilot.com,localhost"
+  extra_ca_cert: ""            # e.g. ~/.config/my-agent-workflows/corp-root.pem
+
+sandbox:
+  build_cache: ~/.m2/repository
+
+graph:
+  bd_root: ~/work/business-data
+
+reference:                     # optional read-only reference implementations
+  core_repo: ""
+  extended_repo: ""
+  mcp_repo: ""
+
+webapp:
+  port: 8787
+  bind: 127.0.0.1

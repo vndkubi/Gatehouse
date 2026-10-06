@@ -1,0 +1,90 @@
+# project.config.yaml — TEAM scope (committed). Editable in Settings UI.
+# Machine-specific values go in config.local.yaml; secrets in .env / keychain.
+
+project:
+  name: my-agent-workflows
+  description: Agentic control plane for <team/product>
+  language:
+    chat: English              # e.g. "<lang> primary, English secondary"
+    artifacts: English
+
+impl:
+  repo_name: my-service
+  github_repo: my-org/my-service
+  # local_checkout derived: {{paths.repos_dir}}/{{impl.repo_name}} (config.local.yaml)
+  default_branch: origin/main
+  stack: java-maven            # java-maven | java-gradle | node | python | dotnet
+  platforms: [server]          # server | ios | android | web
+  build:
+    test_cmd: "mvn clean jacoco:prepare-agent test -Dtest={class}"
+    coverage_tool: jacoco
+  mobile:
+    android_repo: ""
+    ios_repo: ""
+
+jira:
+  url: https://jira.example.com
+  project_key: PROJ
+  unit_folder: proj            # folder under specs/
+  team_label: team-backlog
+  platform_labels: { server: p_server, ios: p_ios, android: p_android }
+  approved_statuses: ["Approved"]
+  pat_env: JIRA_PAT
+
+confluence:
+  url: https://confluence.example.com
+  space: TEAM
+  parent_page_id: ""
+  checklist_page: ""           # optional company review-checklist page
+  pat_env: CONFLUENCE_PAT
+
+mcp:
+  server_name: tracker         # tool prefix used by agents
+  transport: uv                # uv | docker
+  image: ""                    # docker image when transport=docker
+  enable_faq: false
+
+github:
+  token_env: GITHUB_TOKEN
+  members: [alice, bob]
+  ai_reviewer_bot: ""
+
+git:
+  allowed_hosts: [github.com]  # Settings UI may only clone from these hosts
+
+llm:
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
+  chat_model: gpt-4o
+  embed_model: text-embedding-3-large
+  vision_model: ""             # empty => images marked INACCESSIBLE
+  max_concurrency: 4
+  max_retries: 3
+
+executor:
+  primary: copilot             # copilot | codex
+  fallback: codex
+  unattended_model: ""
+
+sandbox:
+  image: my-agent-workflows-sandbox:latest
+  db_image: postgres:16-alpine
+
+review:
+  workers: 4
+  chunk_loc_200k_ctx: 50000
+  chunk_loc_1m_ctx: 200000
+  severity_levels: [P1, P2, P3, P4]
+  author_checks: [A1, A2, A3, A4]
+
+features:
+  ticket_pipeline: true
+  code_review: true
+  legacy_tests: true
+  webapp: true
+  sandbox: true
+  business_graph: false
+  pr_analytics: false
+  codex_sync: true
+  mcp_server: true
+  advisory_embeddings: false

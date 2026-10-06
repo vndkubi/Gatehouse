@@ -1,0 +1,36 @@
+{
+  "name": "gatehouse",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentic control plane: agents work inside the walls, humans and trusted code hold the keys.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "bin": {
+    "gatehouse": "bin/gatehouse.mjs"
+  },
+  "scripts": {
+    "gatehouse": "node bin/gatehouse.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test \"packages/*/test/**/*.test.ts\"",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@simplewebauthn/browser": "^14.0.0",
+    "@simplewebauthn/server": "^14.0.3",
+    "ajv": "^8.20.0",
+    "cross-spawn": "^7.0.6",
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^22.15.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3"
+  }
+}
