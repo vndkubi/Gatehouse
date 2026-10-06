@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: business-reviewer
+role: Checks each acceptance criterion against the change
+pattern: unit-review
+executor: reviewer
+tier: tier-frontier
+scope: read-repo
+inputs: [acceptance, hunks, reproRule, requirements, unitId]
+output: output.schema.json

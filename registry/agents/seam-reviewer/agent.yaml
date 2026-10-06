@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: seam-reviewer
+role: Checks callers and dependents of changed code that the PR did not touch
+pattern: unit-review
+executor: reviewer
+tier: tier-workhorse
+scope: read-repo
+inputs: [hunkIds, hunks, reproRule, requirements, unitId, usages]
+output: output.schema.json

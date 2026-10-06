@@ -1,0 +1,76 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "charters"
+  ],
+  "properties": {
+    "charters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "class_name",
+          "test_class",
+          "fixtures_reused",
+          "scenarios"
+        ],
+        "properties": {
+          "class_name": {
+            "type": "string"
+          },
+          "test_class": {
+            "type": "string"
+          },
+          "fixtures_reused": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scenarios": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "method",
+                "given",
+                "when",
+                "then",
+                "kind"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "method": {
+                  "type": "string"
+                },
+                "given": {
+                  "type": "string"
+                },
+                "when": {
+                  "type": "string"
+                },
+                "then": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "happy",
+                    "negative",
+                    "boundary"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

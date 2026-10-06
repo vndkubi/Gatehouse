@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: implementer
+role: Makes the failing test pass in production code (green phase)
+pattern: tdd-green
+executor: author
+tier: tier-workhorse
+scope: write-repo
+inputs: [context, feedback, task, taskId, testClass, testOutput]
+output: output.schema.json

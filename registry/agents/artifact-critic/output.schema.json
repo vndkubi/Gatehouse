@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "issues"
+  ],
+  "properties": {
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "severity",
+          "artifact",
+          "description",
+          "evidence"
+        ],
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "blocker",
+              "major",
+              "minor"
+            ]
+          },
+          "artifact": {
+            "type": "string",
+            "enum": [
+              "pbi",
+              "spec",
+              "plan",
+              "tasks"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

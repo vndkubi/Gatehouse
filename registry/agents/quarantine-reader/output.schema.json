@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["summary", "acceptance_criteria", "risks", "open_questions"],
+  "properties": {
+    "summary": { "type": "string" },
+    "acceptance_criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "text"],
+        "properties": { "id": { "type": "string" }, "text": { "type": "string" } }
+      }
+    },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "open_questions": { "type": "array", "items": { "type": "string" } }
+  }
+}

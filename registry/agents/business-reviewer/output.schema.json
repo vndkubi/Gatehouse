@@ -1,0 +1,135 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ac_status",
+    "findings"
+  ],
+  "properties": {
+    "ac_status": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ac_id",
+          "status",
+          "evidence_hunks",
+          "note"
+        ],
+        "properties": {
+          "ac_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "implemented",
+              "partial",
+              "missing",
+              "unclear"
+            ]
+          },
+          "evidence_hunks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "severity",
+          "category",
+          "file",
+          "line",
+          "evidence_quote",
+          "explanation",
+          "failing_scenario",
+          "suggested_fix",
+          "repro"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "P1",
+              "P2",
+              "P3",
+              "P4"
+            ]
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "correctness",
+              "security",
+              "concurrency",
+              "error-handling",
+              "data",
+              "api-contract",
+              "performance",
+              "test",
+              "maintainability"
+            ]
+          },
+          "file": {
+            "type": "string"
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evidence_quote": {
+            "type": "string"
+          },
+          "explanation": {
+            "type": "string"
+          },
+          "failing_scenario": {
+            "type": "string"
+          },
+          "suggested_fix": {
+            "type": "string"
+          },
+          "repro": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "test_class",
+                  "test_source"
+                ],
+                "properties": {
+                  "test_class": {
+                    "type": "string"
+                  },
+                  "test_source": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

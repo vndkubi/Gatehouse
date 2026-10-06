@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: spec-writer
+role: Writes the functional specification grounded in the codebase
+pattern: author
+executor: author
+tier: tier-workhorse
+scope: read-repo
+inputs: [feedback, pbi]
+output: output.schema.json

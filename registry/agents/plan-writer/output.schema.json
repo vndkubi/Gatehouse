@@ -1,0 +1,99 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "approach",
+    "steps",
+    "test_strategy",
+    "risks"
+  ],
+  "properties": {
+    "approach": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "description",
+          "files",
+          "traces"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "change"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "change": {
+                  "type": "string",
+                  "enum": [
+                    "create",
+                    "modify",
+                    "delete"
+                  ]
+                }
+              }
+            }
+          },
+          "traces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "test_strategy": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenario_id",
+          "test_class",
+          "kind"
+        ],
+        "properties": {
+          "scenario_id": {
+            "type": "string"
+          },
+          "test_class": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "unit",
+              "integration"
+            ]
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

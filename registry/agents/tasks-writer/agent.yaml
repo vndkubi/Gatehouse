@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: tasks-writer
+role: Breaks a plan into test-first tasks
+pattern: author
+executor: author
+tier: tier-workhorse
+scope: none
+inputs: [feedback]
+output: output.schema.json

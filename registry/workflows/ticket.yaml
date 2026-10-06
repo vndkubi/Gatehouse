@@ -1,0 +1,26 @@
+# Ticket -> pull request (blueprint v1 ticket pipeline: 9 stages, 5 human gates).
+# Planning stages produce validated, rendered artifacts; implementation is test-first with
+# trusted code running every test; the result is reviewed like any PR before GATE_5.
+id: ticket
+version: 1
+finalGate: GATE_5
+steps:
+  - { id: intake, kind: code }
+  - { id: pbi, kind: agent, agent: pbi-writer, executor: author, tier: tier-frontier, scope: none }
+  - { id: gate-1, kind: gate, gate: GATE_1 }
+  - { id: spec, kind: agent, agent: spec-writer, executor: author, tier: tier-workhorse, scope: read-repo }
+  - { id: gate-2, kind: gate, gate: GATE_2 }
+  - { id: plan, kind: agent, agent: plan-writer, executor: author, tier: tier-frontier, scope: read-repo }
+  - { id: gate-3, kind: gate, gate: GATE_3 }
+  - { id: tasks, kind: agent, agent: tasks-writer, executor: author, tier: tier-workhorse, scope: none }
+  - { id: review-artifacts, kind: agent, agent: artifact-critic, executor: critic, tier: tier-frontier, scope: read-repo }
+  - { id: gate-4, kind: gate, gate: GATE_4 }
+  - id: implement
+    kind: agent
+    executor: author
+    tier: tier-workhorse
+    scope: write-repo
+    params: { testWriter: test-writer, implementer: implementer, maxLoc: 400 }
+  - { id: code-review, kind: code }
+  - { id: package, kind: code }
+  - { id: gate-5, kind: gate, gate: GATE_5 }

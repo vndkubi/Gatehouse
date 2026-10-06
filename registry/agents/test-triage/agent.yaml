@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: test-triage
+role: Ranks untested legacy classes by business risk
+pattern: triage
+executor: author
+tier: tier-workhorse
+scope: read-repo
+inputs: [feedback, inventory, maxTargets]
+output: output.schema.json

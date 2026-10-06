@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: viewpoint-reviewer
+role: Reviews a change from one risk viewpoint (security, money, data integrity, ...)
+pattern: unit-review
+executor: reviewer
+tier: tier-workhorse
+scope: read-repo
+inputs: [checklist, hunkIds, hunks, reproRule, requirements, unitId, viewpointTitle]
+output: output.schema.json

@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: characterization-writer
+role: Writes characterization tests that pin current behaviour
+pattern: characterize
+executor: author
+tier: tier-workhorse
+scope: write-repo
+inputs: [context, feedback, scenarios, task, taskId, testClass]
+output: output.schema.json

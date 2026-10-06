@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: test-charter
+role: Designs business-first characterization scenarios per class
+pattern: author
+executor: author
+tier: tier-frontier
+scope: read-repo
+inputs: [feedback, targets]
+output: output.schema.json

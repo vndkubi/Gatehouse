@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verdicts"],
+  "properties": {
+    "verdicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_id", "agree", "reasoning", "counter_evidence"],
+        "properties": {
+          "finding_id": { "type": "string" },
+          "agree": { "type": "boolean" },
+          "reasoning": { "type": "string" },
+          "counter_evidence": {
+            "anyOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["file", "line", "quote"],
+                "properties": {
+                  "file": { "type": "string" },
+                  "line": { "type": "integer" },
+                  "quote": { "type": "string" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

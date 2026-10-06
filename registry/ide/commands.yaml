@@ -1,0 +1,50 @@
+# Executor-neutral IDE commands. `gatehouse ide install` compiles them into VS Code / Copilot
+# prompt files, Codex custom prompts and Claude Code commands. Every command only calls tools of
+# the local `gatehouse` MCP server; the work runs inside Gatehouse and approvals stay in the console.
+commands:
+  - name: gatehouse-review
+    description: Review a pull request with Gatehouse (cited, evidence-checked findings; you approve before anything is posted)
+    argumentHint: <repo> <pr-number>
+    tool: start_pr_review
+    body: |
+      Start a Gatehouse pull request review.
+      Arguments: {{args}}
+      1. If the repository or PR number is missing, call `list_repos` and `list_pull_requests` and ask me which one.
+      2. Call `start_pr_review` with the repository name and PR number.
+      3. Tell me the job id and that the run will stop at GATE_5 in the Gatehouse console, where I approve or reject with my passkey.
+  - name: gatehouse-self-review
+    description: Review the current branch against its base locally with Gatehouse; nothing is posted
+    argumentHint: <repo> [head-ref] [base-ref]
+    tool: start_branch_review
+    body: |
+      Review a branch with Gatehouse before opening a pull request.
+      Arguments: {{args}}
+      1. Use the current git branch as the head ref if none is given (it must be pushed to the remote Gatehouse mirrors).
+      2. Call `start_branch_review`.
+      3. When it finishes, call `get_summary` with the run id and show me the findings grouped by severity.
+  - name: gatehouse-ticket
+    description: Turn a ticket into a reviewed draft PR with Gatehouse (PBI, spec, plan, tasks, test-first implementation)
+    argumentHint: <repo> <TICKET-KEY>
+    tool: start_ticket
+    body: |
+      Start the Gatehouse ticket pipeline.
+      Arguments: {{args}}
+      1. Call `start_ticket` with the repository and ticket key. If I pasted the ticket text, pass it as `text`.
+      2. Explain that each artifact (PBI, spec, plan, tasks, final patch) waits for my approval in the Gatehouse console, and that blocking questions are answered there too.
+  - name: gatehouse-legacy-tests
+    description: Add characterization tests for the least-covered classes, with measured coverage before and after
+    argumentHint: <repo> [package-prefix] [max-classes]
+    tool: start_legacy_tests
+    body: |
+      Start the Gatehouse legacy test pipeline.
+      Arguments: {{args}}
+      Call `start_legacy_tests`, then tell me where to approve the targets and charters in the console.
+  - name: gatehouse-status
+    description: Show Gatehouse runs, what is waiting for approval, and a run's summary
+    argumentHint: '[run-id]'
+    tool: list_runs
+    body: |
+      Show the state of Gatehouse.
+      Arguments: {{args}}
+      - With a run id: call `run_status`, then `get_summary`, and summarize what happened and what is next.
+      - Without: call `list_runs` and list the runs waiting for my decision first, with their console links.

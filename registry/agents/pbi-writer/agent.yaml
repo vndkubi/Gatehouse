@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: pbi-writer
+role: Turns a ticket into a testable backlog item with quoted acceptance criteria
+pattern: quarantined-extract
+executor: author
+tier: tier-frontier
+scope: none
+inputs: [feedback]
+output: output.schema.json

@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "backlog"
+  ],
+  "properties": {
+    "backlog": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "class_name",
+          "reason",
+          "priority",
+          "risk"
+        ],
+        "properties": {
+          "class_name": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "risk": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

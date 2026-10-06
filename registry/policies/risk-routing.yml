@@ -1,0 +1,64 @@
+# Risk routing: which cross-cutting viewpoints a change must be reviewed from.
+# A viewpoint fires when any changed hunk matches its paths (globs on the file path) or
+# content (regex on added/removed lines). Mandatory viewpoints are fail-closed: if their
+# review unit does not complete, the review package is marked incomplete.
+viewpoints:
+  - id: security
+    title: Security
+    mandatory: true
+    paths: ["**/auth/**", "**/security/**", "**/*Auth*", "**/*Token*", "**/*Crypto*", "**/*Password*", "**/web/rest/**", "**/controller/**"]
+    content: ['password', 'secret', 'token', 'crypt', 'cipher', 'jwt', '@PreAuthorize', '@Secured', 'createQuery', 'nativeQuery', 'Runtime\.getRuntime', 'ProcessBuilder', 'ObjectInputStream', 'innerHTML', 'eval\(']
+    checklist:
+      - Injection (SQL/JPQL, command, path, template, HTML) from any externally supplied value
+      - Missing or weakened authorization checks; IDOR on identifiers taken from the request
+      - Secrets, tokens or personal data written to logs, responses or exceptions
+      - Input validation and size limits at trust boundaries
+      - Unsafe crypto, deserialization or randomness
+  - id: money
+    title: Money and pricing arithmetic
+    mandatory: true
+    paths: ["**/*Price*", "**/*Pricing*", "**/*Payment*", "**/*Invoice*", "**/*Order*", "**/*Cart*", "**/*Checkout*"]
+    content: ['BigDecimal', 'price', 'amount', 'total', 'fee', 'discount', 'tax', 'currency', 'refund']
+    checklist:
+      - Rounding mode and scale applied consistently; no double/float for money
+      - Boundary comparisons (< vs <=, inclusive thresholds) match the stated rule
+      - Negative, zero and null amounts; overflow on large values
+      - Currency mixing and conversion
+      - Totals persisted match totals shown and charged
+  - id: data-integrity
+    title: Data integrity and transactions
+    mandatory: true
+    paths: ["**/repository/**", "**/domain/**", "**/entity/**", "**/migration/**", "**/*.sql", "**/liquibase/**", "**/flyway/**", "**/db/**"]
+    content: ['@Transactional', '\.save\(', '\.delete', 'INSERT ', 'UPDATE ', 'DELETE ', 'ALTER TABLE', 'createTable', 'addColumn', 'dropColumn']
+    checklist:
+      - Transaction boundaries cover every write that must be atomic
+      - Schema migrations are additive/reversible and match entity mappings
+      - Nullability and constraints agree between code and schema
+      - Lost updates and partial writes on failure
+  - id: api-contract
+    title: API contract and compatibility
+    mandatory: false
+    paths: ["**/web/rest/**", "**/controller/**", "**/dto/**", "**/*Resource.java", "**/*Controller.*", "**/openapi*", "**/*.proto"]
+    content: ['@RequestMapping', '@GetMapping', '@PostMapping', '@PutMapping', '@PatchMapping', '@DeleteMapping', 'ResponseEntity', '@JsonProperty']
+    checklist:
+      - Backward-incompatible changes to request/response shape, paths or status codes
+      - Validation annotations and error responses for bad input
+      - Pagination, idempotency and versioning expectations
+  - id: concurrency
+    title: Concurrency
+    mandatory: false
+    paths: []
+    content: ['synchronized', 'volatile', 'ExecutorService', 'CompletableFuture', '@Async', 'new Thread', 'ConcurrentHashMap', 'ReentrantLock', 'AtomicInteger', 'parallelStream']
+    checklist:
+      - Shared mutable state accessed without synchronization
+      - Check-then-act races, double execution, ordering assumptions
+      - Thread pools and futures that swallow exceptions
+  - id: error-handling
+    title: Error handling
+    mandatory: false
+    paths: []
+    content: ['catch\s*\(', 'throw new', 'orElseThrow', 'Optional', '\.orElse\(null\)']
+    checklist:
+      - Exceptions swallowed or rethrown without context
+      - Error paths that leave state half-updated
+      - Null returns where callers expect values

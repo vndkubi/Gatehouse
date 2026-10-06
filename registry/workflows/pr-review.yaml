@@ -1,0 +1,25 @@
+# PR review workflow (design 03 §3.2). Order, agents, tiers and scopes are declared here;
+# the engine refuses to run if a declared step has no implementation or vice versa.
+id: pr-review
+version: 2
+finalGate: GATE_5
+steps:
+  - { id: freeze, kind: code }
+  - { id: enumerate, kind: code }
+  - { id: mask, kind: code }
+  - { id: blast-radius, kind: code, params: { maxSymbols: 15, maxUsagesPerSymbol: 20 } }
+  - { id: intake, kind: code }
+  - { id: quarantine-read, kind: agent, agent: quarantine-reader, executor: reviewer, tier: tier-scale, scope: none }
+  - { id: plan, kind: code, params: { routing: risk-routing, maxSeamUnits: 3, maxAcPerBusinessUnit: 8 } }
+  - id: review
+    kind: agent
+    executor: reviewer
+    scope: read-repo
+    params:
+      agents: { T: pr-reviewer, B: business-reviewer, V: viewpoint-reviewer, S: seam-reviewer }
+      tiers: { T: tier-workhorse, B: tier-frontier, V: tier-workhorse, S: tier-workhorse }
+  - { id: citations, kind: code }
+  - { id: evidence, kind: code, params: { severities: [P1, P2] } }
+  - { id: challenge, kind: agent, agent: critic, executor: critic, tier: tier-frontier, scope: read-repo, params: { severities: [P1, P2] } }
+  - { id: synthesis, kind: code }
+  - { id: gate, kind: gate, gate: GATE_5 }

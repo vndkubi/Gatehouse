@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: pr-reviewer
+role: Reviews one slice of a pull request for real, cited defects
+pattern: unit-review
+executor: reviewer
+tier: tier-workhorse
+scope: read-repo
+inputs: [hunkIds, hunks, reproRule, requirements, riskTags, unitId]
+output: output.schema.json

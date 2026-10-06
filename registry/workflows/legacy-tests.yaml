@@ -1,0 +1,17 @@
+# Legacy test coverage (blueprint v1: 7 stages, 4 gates). Business-first characterization
+# tests for code without a spec; coverage is measured by JaCoCo before and after, never claimed.
+id: legacy-tests
+version: 1
+finalGate: GATE_4
+steps:
+  - { id: inventory, kind: code, params: { inventoryRows: 40 } }
+  - { id: triage, kind: agent, agent: test-triage, executor: author, tier: tier-workhorse, scope: read-repo, params: { maxTargets: 3 } }
+  - { id: gate-1, kind: gate, gate: GATE_1 }
+  - { id: charter, kind: agent, agent: test-charter, executor: author, tier: tier-frontier, scope: read-repo }
+  - { id: gate-2, kind: gate, gate: GATE_2 }
+  - { id: implement-tests, kind: agent, agent: characterization-writer, executor: author, tier: tier-workhorse, scope: write-repo }
+  - { id: verify-coverage, kind: code }
+  - { id: gate-3, kind: gate, gate: GATE_3 }
+  - { id: review, kind: agent, agent: test-critic, executor: critic, tier: tier-frontier, scope: read-repo }
+  - { id: package, kind: code }
+  - { id: gate-4, kind: gate, gate: GATE_4 }

@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: artifact-critic
+role: Independently reviews planning artifacts against ticket and code
+pattern: adversarial-critic
+executor: critic
+tier: tier-frontier
+scope: read-repo
+inputs: [artifacts]
+output: output.schema.json
