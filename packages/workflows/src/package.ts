@@ -1,3 +1,4 @@
+import type { AuditSummary } from './audit-review.ts';
 import type { Finding } from './findings.ts';
 import type { ReviewUnit } from './plan.ts';
 
@@ -42,9 +43,11 @@ export interface ReviewPackage {
   masked: string[];
   findings: Finding[];
   agents: Record<string, string>;
-  usage: { calls: number; promptTokens: number; completionTokens: number; costUsd: number | null };
+  usage: { calls: number; promptTokens: number; completionTokens: number; cachedPromptTokens?: number; costUsd: number | null };
   critic: 'codex' | 'none';
   warnings: string[];
+  /** pr-review-audit runs only: per-item verdicts, investigations and verification outcomes. */
+  audit?: AuditSummary;
 }
 
 export const MARKER = (runId: string) => `<!-- gatehouse:run=${runId} -->`;

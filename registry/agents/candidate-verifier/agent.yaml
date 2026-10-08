@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: candidate-verifier
+role: Designs one test that demonstrates a candidate finding against its source of truth
+pattern: test-as-evidence
+executor: reviewer
+tier: tier-workhorse
+scope: read-repo
+inputs: [finding, requirements, rules]
+output: output.schema.json

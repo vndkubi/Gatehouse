@@ -15,6 +15,17 @@ export interface LlmProvider {
   /** USD per million tokens; when absent, cost is reported as unknown and only token budgets apply. */
   pricePerMTokIn?: number;
   pricePerMTokOut?: number;
+  /** Provider quota shared by every run on this machine; calls wait for room instead of failing. */
+  rateLimit?: LlmRateLimit;
+}
+
+export interface LlmRateLimit {
+  /** Requests per minute. */
+  rpm?: number;
+  /** Tokens per minute (prompt + completion). */
+  tpm?: number;
+  /** Whether cache-hit prompt tokens count toward tpm. Unknown for most company gateways: measure, then set. Default true. */
+  countCachedTokens?: boolean;
 }
 
 export type SecretRef = { secret: string };
@@ -134,6 +145,12 @@ const providerCheck = (_: string, v: unknown): string | null => {
   }
   if (typeof p.keySecret !== 'string' || !p.keySecret) return 'keySecret is required';
   if (typeof p.tpspApproved !== 'boolean') return 'tpspApproved must be true or false';
+  if (p.rateLimit !== undefined) {
+    const r = p.rateLimit as LlmRateLimit | null;
+    if (!r || typeof r !== 'object') return 'rateLimit must be a mapping';
+    for (const k of ['rpm', 'tpm'] as const) if (r[k] !== undefined && (!Number.isInteger(r[k]) || r[k]! < 1)) return `rateLimit.${k} must be a positive integer`;
+    if (r.countCachedTokens !== undefined && typeof r.countCachedTokens !== 'boolean') return 'rateLimit.countCachedTokens must be true or false';
+  }
   return null;
 };
 

@@ -6,8 +6,10 @@ import { redact } from '@gatehouse/dlp';
 import { StepRunner, mapLimit } from '@gatehouse/engine';
 import type { EnvSpec } from '@gatehouse/env';
 import type { GitHubClient } from '@gatehouse/github';
-import type { AgentResult, ExecutorAdapter } from '@gatehouse/harness';
+import type { AgentResult, ExecutorAdapter, StructuredCaller } from '@gatehouse/harness';
 import { fetchMirror, fetchPullRequest, git, maskAgentInstructions, resolveCommit, type ExecutionTarget, type Workspace } from '@gatehouse/targets';
+import type { ReviewArm } from './audit.ts';
+import { auditIncomplete, auditSteps, type AuditSummary } from './audit-review.ts';
 import { blastRadius, type BlastRadius } from './blast.ts';
 import { numberedHunk, parseUnifiedDiff, type FileDiff, type Hunk } from './diff.ts';
 import { runJavaRepro } from './evidence.ts';
@@ -36,6 +38,8 @@ export interface PrReviewDeps {
   reviewer: ExecutorAdapter;
   /** Independent critic on a different model (Codex), or null to skip the challenge. */
   critic: ExecutorAdapter | null;
+  /** Single-pass schema-bound model calls (audit arms B and C, fix proposals). */
+  structured?: StructuredCaller | null;
   usage: () => ReviewPackage['usage'];
   /** Token budget of this run; units are not started once it is spent. */
   budgetTokens?: number;
@@ -52,6 +56,8 @@ export interface PrReviewInput {
   keepWorkspaces?: boolean;
   /** Part of another pipeline (ticket code review): finishes without its own GATE_5. */
   embedded?: boolean;
+  /** Runs the batched-audit workflow (pr-review-audit) with this arm instead of pr-review. */
+  arm?: ReviewArm;
 }
 
 export interface PrReviewResult {
@@ -72,7 +78,7 @@ interface Context {
   mergeBase: string;
 }
 
-interface UnitResult {
+export interface UnitResult {
   unit: string;
   kind: UnitKind;
   ok: boolean;
@@ -110,7 +116,7 @@ const REPRO_OFF = 'Set `repro` to null for every finding (this repository has no
  * verdicts are computed by code, and the run ends at GATE_5 — nothing is posted from here.
  */
 export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Promise<PrReviewResult> {
-  const def = loadWorkflow('pr-review');
+  const def = loadWorkflow(input.arm ? 'pr-review-audit' : 'pr-review');
   const log = deps.log ?? (() => undefined);
   const runner = new StepRunner(deps.events, input.runId, log);
   const runDir = join(deps.runsDir, input.runId);
@@ -135,11 +141,12 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
   let units: ReviewUnit[] = [];
   let reviewed: UnitResult[] = [];
   let findings: Finding[] = [];
+  let audit: AuditSummary | null = null;
   let result!: PrReviewResult;
 
   const agentFor = (step: string): AgentSpec => loadAgent(stepDef(def, step).agent!);
 
-  const steps = bindSteps<() => Promise<void>>(def, {
+  const impls: Record<string, () => Promise<void>> = {
     // Pin the exact commits once; everything after works on these SHAs.
     freeze: async () => {
       ctx = await runner.step('freeze', async (): Promise<Context> => {
@@ -360,7 +367,8 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
 
     synthesis: async () => {
       result = await runner.step('synthesis', async () => {
-        const final = dedupe(findings);
+        // Audit findings are already grouped by root cause; dedupe would merge distinct causes on nearby lines.
+        const final = audit ? findings : dedupe(findings);
         const tUnits = units.filter((u) => u.kind === 'T');
         const reviewedSet = new Set(reviewed.filter((r) => r.kind === 'T').flatMap((u) => u.reviewed));
         const ledgerHunks = tUnits.flatMap((u) => u.hunkIds);
@@ -374,6 +382,7 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
         ];
         const unreviewed = ledgerHunks.filter((h) => !reviewedSet.has(h));
         if (unreviewed.length) incompleteReasons.push(`${unreviewed.length} of ${ledgerHunks.length} hunks were not reviewed (${compactIds(unreviewed)})`);
+        if (audit) incompleteReasons.push(...auditIncomplete(audit).filter((r) => !/\.tech /.test(r) || !unreviewed.length));
         const pkg: ReviewPackage = {
           version: 1,
           runId: input.runId,
@@ -402,12 +411,17 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
           findings: final,
           agents: Object.fromEntries(def.steps.filter((s) => s.agent).map((s) => [s.agent!, loadAgent(s.agent!).version])),
           usage: deps.usage(),
-          critic: deps.critic ? 'codex' : 'none',
+          critic: deps.critic && !audit ? 'codex' : 'none',
           warnings: [
             ...(requirements ? [] : ['Requirements could not be extracted; reviewers worked from the diff alone.']),
             ...(reproAllowed ? [] : [`No repro tests were run: environment is ${env.level}${env.level === 'L2' && !envApproved ? ' but not approved at GATE_ENV' : ''} (findings are inspected-only).`]),
-            ...(deps.critic ? [] : ['No independent critic ran; findings are unchallenged.']),
+            ...(audit
+              ? [`Review arm ${audit.arm}: ${audit.armLabel}. Business/technical findings count as confirmed only when a test fails on head through an assertion.`]
+              : deps.critic
+                ? []
+                : ['No independent critic ran; findings are unchallenged.']),
           ],
+          ...(audit ? { audit } : {}),
         };
         const art = deps.artifacts.putJson('pr.review.package', pkg, { runId: input.runId, head: ctx.head });
         const outDir = join(runDir, 'out');
@@ -432,18 +446,59 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
         return { gate, artifact: result.packageHash };
       });
     },
-  });
+  };
+
+  // The audit workflow keeps intake, plan, synthesis and gate, and replaces the review in between.
+  const { review: _r, citations: _c, evidence: _e, challenge: _ch, ...shared } = impls;
+  const steps = bindSteps<() => Promise<void>>(
+    def,
+    input.arm
+      ? {
+          ...shared,
+          ...auditSteps({
+            arm: input.arm,
+            def,
+            runner,
+            deps,
+            runId: input.runId,
+            runDir,
+            timeoutMs,
+            keepWorkspaces: !!input.keepWorkspaces,
+            state: {
+              get ws() { return ws; },
+              get files() { return files; },
+              get hunks() { return hunks; },
+              get blast() { return blast; },
+              get requirements() { return requirements; },
+              get units() { return units; },
+              get reproAllowed() { return reproAllowed; },
+              get envSpec() { return env.spec; },
+              get head() { return ctx.head; },
+              get mergeBase() { return ctx.mergeBase; },
+            },
+            requirementsText,
+            agenticReview: (unit) => reviewUnit(unit, { step: 'agentic-review', repro: false }),
+            publish: (r) => {
+              findings = r.findings;
+              reviewed = r.reviewed;
+              audit = r.audit;
+            },
+          }),
+        }
+      : impls,
+  );
 
   for (const s of steps) await s.impl();
   if (!input.keepWorkspaces) await deps.target.destroy(ws);
   return result;
 
-  async function reviewUnit(unit: ReviewUnit): Promise<UnitResult> {
-    const d = stepDef(def, 'review');
-    const agents = stepParam<Record<UnitKind, string>>(def, 'review', 'agents', { T: 'pr-reviewer', B: 'business-reviewer', V: 'viewpoint-reviewer', S: 'seam-reviewer' });
-    const tiers = stepParam<Record<UnitKind, string>>(def, 'review', 'tiers', { T: 'tier-workhorse', B: 'tier-frontier', V: 'tier-workhorse', S: 'tier-workhorse' });
+  async function reviewUnit(unit: ReviewUnit, opts: { step?: string; repro?: boolean } = {}): Promise<UnitResult> {
+    const stepName = opts.step ?? 'review';
+    const d = stepDef(def, stepName);
+    const agents = stepParam<Record<UnitKind, string>>(def, stepName, 'agents', { T: 'pr-reviewer', B: 'business-reviewer', V: 'viewpoint-reviewer', S: 'seam-reviewer' });
+    const tiers = stepParam<Record<UnitKind, string>>(def, stepName, 'tiers', { T: 'tier-workhorse', B: 'tier-frontier', V: 'tier-workhorse', S: 'tier-workhorse' });
     const spec = loadAgent(agents[unit.kind]);
-    const base = fill(spec.prompt, unitValues(unit));
+    const base = fill(spec.prompt, unitValues(unit, opts.repro ?? reproAllowed));
     let instructions = base;
     const spent = () => {
       const u = deps.usage();
@@ -483,7 +538,7 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
     return { unit: unit.id, kind: unit.kind, ok: false, reviewed: [], findings: [] };
   }
 
-  function unitValues(unit: ReviewUnit): Record<string, string> {
+  function unitValues(unit: ReviewUnit, repro: boolean): Record<string, string> {
     const hunkText = (ids: string[], budget: number) => {
       let used = 0;
       const blocks: string[] = [];
@@ -499,7 +554,7 @@ export async function runPrReview(deps: PrReviewDeps, input: PrReviewInput): Pro
       }
       return blocks.join('\n\n');
     };
-    const common = { unitId: unit.id, requirements: requirementsText(requirements), reproRule: reproAllowed ? REPRO_ON : REPRO_OFF, hunkIds: unit.hunkIds.join(', '), riskTags: unit.riskTags.join(', ') || 'none' };
+    const common = { unitId: unit.id, requirements: requirementsText(requirements), reproRule: repro ? REPRO_ON : REPRO_OFF, hunkIds: unit.hunkIds.join(', '), riskTags: unit.riskTags.join(', ') || 'none' };
     if (unit.kind === 'B') {
       const acs = (requirements?.acceptance_criteria ?? []).filter((a) => unit.acIds?.includes(a.id));
       return { ...common, acceptance: untrusted('acceptance-criteria', acs.map((a) => `- ${a.id}: ${a.text}`).join('\n')), hunks: hunkText(unit.hunkIds, 60_000) };
@@ -520,7 +575,7 @@ function hunkBlock(h: Hunk): string {
   return `### ${h.id} — ${h.file}\n${untrusted(`diff:${h.id}`, numberedHunk(h))}`;
 }
 
-function requirementsText(r: Requirements | null): string {
+export function requirementsText(r: Requirements | null): string {
   if (!r) return '_Not available; infer intent from the diff._';
   const body = [r.summary, ...r.acceptance_criteria.map((a) => `- ${a.id}: ${a.text}`), ...(r.risks.length ? ['Risks:', ...r.risks.map((x) => `- ${x}`)] : [])].join('\n');
   return untrusted('requirements (derived from PR text)', body);

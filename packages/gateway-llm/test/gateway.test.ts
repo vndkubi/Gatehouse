@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { EventStore, RunTokenSigner, loadConfig } from '@gatehouse/core';
-import { LlmGateway } from '../src/index.ts';
+import { LlmGateway, RateLimiter } from '../src/index.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'gh-gw-'));
 const { config } = loadConfig({ env: { GATEHOUSE_HOME: home }, overrides: { llm: { budgetTokensPerRun: 1_000 } } });
@@ -63,7 +63,7 @@ test('maps tier aliases to provider models, injects the upstream key, records us
     assert.equal(seen[0]?.url, 'https://api.deepseek.com/chat/completions');
     assert.equal(seen[0]?.body.model, 'deepseek-flash');
     assert.equal(seen[0]?.auth, 'Bearer sk-upstream-key');
-    assert.deepEqual(gw.usageFor('run-1'), { calls: 1, promptTokens: 600, completionTokens: 500, costUsd: null });
+    assert.deepEqual(gw.usageFor('run-1'), { calls: 1, promptTokens: 600, completionTokens: 500, cachedPromptTokens: 0, costUsd: null });
     const call = events.list('run-1').find((e) => e.type === 'MODEL_CALL');
     assert.equal((call?.payload as { model: string }).model, 'deepseek-flash');
 
@@ -116,4 +116,47 @@ test('blocks account data and redacts credentials before anything leaves the mac
     await gw.stop();
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('records provider-reported cache hits; never assumes them', async () => {
+  const events = new EventStore(':memory:');
+  const signer = new RunTokenSigner(randomBytes(32));
+  let call = 0;
+  const fetchImpl = (async () => {
+    call++;
+    const usage = call === 1 ? { prompt_tokens: 100, completion_tokens: 1, prompt_cache_hit_tokens: 64 } : call === 2 ? { prompt_tokens: 100, completion_tokens: 1, prompt_tokens_details: { cached_tokens: 32 } } : { prompt_tokens: 100, completion_tokens: 1 };
+    return Response.json({ choices: [{ message: { content: 'ok' } }], usage });
+  }) as typeof fetch;
+  const { config: big } = loadConfig({ env: { GATEHOUSE_HOME: home } });
+  const gw = new LlmGateway({ config: big, signer, events, providerKey: async () => 'k', fetchImpl });
+  const base = await gw.start(0);
+  try {
+    const token = signer.issue('run-c', 'audit-T1', 60_000);
+    for (let i = 0; i < 3; i++) assert.equal((await post(base, token, { model: 'tier-workhorse', messages: [{ role: 'user', content: 'x' }] })).status, 200);
+    assert.equal(gw.usageFor('run-c').cachedPromptTokens, 96);
+    const calls = events.list('run-c').filter((e) => e.type === 'MODEL_CALL').map((e) => (e.payload as { cachedPromptTokens: number }).cachedPromptTokens);
+    assert.deepEqual(calls, [64, 32, 0]);
+  } finally {
+    await gw.stop();
+  }
+});
+
+test('rate limiter: waits for room in the one-minute window and settles on reported usage', async () => {
+  let now = 0;
+  const waits: number[] = [];
+  const limiter = new RateLimiter({ rpm: 60, tpm: 1_000, countCachedTokens: false }, () => now, async (ms) => {
+    waits.push(ms);
+    now += ms;
+  });
+  const a = await limiter.acquire(600);
+  assert.equal(a.waitedMs, 0);
+  // The provider served 500 of the 600 prompt tokens from cache and does not count them.
+  limiter.settle(a.ticket, { promptTokens: 600, completionTokens: 50, cachedPromptTokens: 500 });
+  assert.deepEqual(limiter.window(), { requests: 1, tokens: 150 });
+  now = 1_000;
+  assert.equal((await limiter.acquire(800)).waitedMs, 0, 'fits once cached tokens are not counted');
+  now = 2_000;
+  const c = await limiter.acquire(500);
+  assert.ok(c.waitedMs >= 58_000, `waits until the first call leaves the window (${c.waitedMs}ms)`);
+  assert.equal(waits.length >= 1, true);
 });

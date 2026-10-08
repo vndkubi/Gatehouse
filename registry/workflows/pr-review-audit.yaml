@@ -1,0 +1,61 @@
+# PR review, batched-audit variant (design 09). Same intake and plan as pr-review; the review
+# itself is split into checkable items. One run uses one arm:
+#   A  agentic unit reviewers (the pr-review baseline), candidates only
+#   B  single-pass audit over a fixed context pack, candidates only
+#   C  B + context expansion when an item lacks a contract/owner/config, unknown cross-service
+#      impact, an independent second read of high-risk items and of a sample of "no finding"
+# Every arm shares the same verification policy: business/technical candidates must be shown by
+# a test run on head and merge base; convention issues get a short explanation; fixes are
+# proposed only after that.
+id: pr-review-audit
+version: 1
+finalGate: GATE_5
+steps:
+  - { id: freeze, kind: code }
+  - { id: enumerate, kind: code }
+  - { id: mask, kind: code }
+  - { id: blast-radius, kind: code, params: { maxSymbols: 15, maxUsagesPerSymbol: 20 } }
+  - { id: intake, kind: code }
+  - { id: quarantine-read, kind: agent, agent: quarantine-reader, executor: reviewer, tier: tier-scale, scope: none }
+  - { id: plan, kind: code, params: { routing: risk-routing, maxSeamUnits: 3, maxAcPerBusinessUnit: 8 } }
+  # Arm A only.
+  - id: agentic-review
+    kind: agent
+    executor: reviewer
+    scope: read-repo
+    params:
+      agents: { T: pr-reviewer, B: business-reviewer, V: viewpoint-reviewer, S: seam-reviewer }
+      tiers: { T: tier-workhorse, B: tier-frontier, V: tier-workhorse, S: tier-workhorse }
+  # Arms B and C: single pass, no tools. Prompt order: requirements + item catalog, region pack, batch.
+  - id: audit
+    kind: agent
+    agent: batch-auditor
+    executor: reviewer
+    tier: tier-workhorse
+    scope: none
+    params:
+      maxItemsPerBatch: 20
+      maxPackChars: 120000
+      maxCallers: 12
+      maxContractSnippets: 6
+      responseFormat: json_object
+      specDirs: []
+  # Arm C does the work; A and B only record which candidates go on to verification.
+  - id: investigate
+    kind: agent
+    agent: context-investigator
+    executor: reviewer
+    tier: tier-workhorse
+    scope: read-repo
+    params:
+      expansionRounds: 2
+      maxInvestigations: 30
+      auditSampleRate: 0.1
+      secondReadHighRisk: true
+      secondReadTier: tier-workhorse
+      agenticLookup: true
+  - { id: group, kind: code, params: { similarity: 0.3 } }
+  - { id: verify, kind: agent, agent: candidate-verifier, executor: reviewer, tier: tier-workhorse, scope: read-repo, params: { maxVerifications: 10 } }
+  - { id: propose-fix, kind: agent, agent: fix-proposer, executor: reviewer, tier: tier-workhorse, scope: none }
+  - { id: synthesis, kind: code }
+  - { id: gate, kind: gate, gate: GATE_5 }

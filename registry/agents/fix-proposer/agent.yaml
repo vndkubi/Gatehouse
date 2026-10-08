@@ -1,0 +1,11 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+# Runs only after verification (design 09): a fix is proposed for a confirmed finding or an
+# explained convention issue, never while a defect is still a suspicion.
+name: fix-proposer
+role: Proposes an AS-IS / TO-BE change for a verified finding
+pattern: single-pass-fix
+executor: reviewer
+tier: tier-workhorse
+scope: none
+inputs: []
+output: output.schema.json

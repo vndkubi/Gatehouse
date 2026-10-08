@@ -2,6 +2,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { resolveTier, type EventStore, type GatehouseConfig, type LlmProvider, type RunClaims, type RunTokenSigner } from '@gatehouse/core';
 import { redact, scan, type DlpOptions } from '@gatehouse/dlp';
+import { estimateTokens, limiterFor } from './ratelimit.ts';
+
+export { RateLimiter, estimateTokens, limiterFor } from './ratelimit.ts';
 
 export interface GatewayOptions {
   config: GatehouseConfig;
@@ -18,6 +21,8 @@ export interface RunUsage {
   calls: number;
   promptTokens: number;
   completionTokens: number;
+  /** Prompt tokens the provider served from its prefix cache (subset of promptTokens), as reported. */
+  cachedPromptTokens: number;
   /** null when any provider used lacks pricing. */
   costUsd: number | null;
 }
@@ -65,7 +70,7 @@ export class LlmGateway {
   }
 
   usageFor(runId: string): RunUsage {
-    return this.usage.get(runId) ?? { calls: 0, promptTokens: 0, completionTokens: 0, costUsd: 0 };
+    return this.usage.get(runId) ?? { calls: 0, promptTokens: 0, completionTokens: 0, cachedPromptTokens: 0, costUsd: 0 };
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -118,6 +123,12 @@ export class LlmGateway {
     const stream = body.stream === true;
     const upstreamBody: ChatRequest = { ...body, model: route.model };
     if (stream) upstreamBody.stream_options = { ...(body.stream_options ?? {}), include_usage: true };
+    // Shared provider quota (RPM/TPM): wait for room rather than collecting 429s.
+    const limiter = limiterFor(route.providerName, route.provider.rateLimit);
+    const reservation = limiter ? await limiter.acquire(estimateTokens(collectText(body.messages))) : null;
+    if (reservation && reservation.waitedMs > 0) {
+      this.options.events.append(claims.runId, 'RATE_LIMIT_WAIT', { stepId: claims.stepId, provider: route.providerName, waitedMs: reservation.waitedMs });
+    }
     const started = Date.now();
     const upstream = await this.fetchImpl(`${route.provider.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
@@ -128,12 +139,15 @@ export class LlmGateway {
     const record = (u: Usage | undefined, status: number) => {
       const promptTokens = u?.prompt_tokens ?? 0;
       const completionTokens = u?.completion_tokens ?? 0;
+      const cachedPromptTokens = cachedTokens(u);
+      if (limiter && reservation) limiter.settle(reservation.ticket, { promptTokens, completionTokens, cachedPromptTokens });
       const cost = price(route.provider, promptTokens, completionTokens);
       const total = this.usageFor(claims.runId);
       this.usage.set(claims.runId, {
         calls: total.calls + 1,
         promptTokens: total.promptTokens + promptTokens,
         completionTokens: total.completionTokens + completionTokens,
+        cachedPromptTokens: total.cachedPromptTokens + cachedPromptTokens,
         costUsd: total.costUsd === null || cost === null ? null : total.costUsd + cost,
       });
       this.options.events.append(claims.runId, 'MODEL_CALL', {
@@ -145,6 +159,7 @@ export class LlmGateway {
         stream,
         promptTokens,
         completionTokens,
+        cachedPromptTokens,
         costUsd: cost,
         durationMs: Date.now() - started,
       });
@@ -198,6 +213,15 @@ export class LlmGateway {
 interface Usage {
   prompt_tokens?: number;
   completion_tokens?: number;
+  /** DeepSeek: prompt tokens served from its context cache. */
+  prompt_cache_hit_tokens?: number;
+  /** OpenAI-compatible servers (OpenAI, vLLM): cached prompt tokens. */
+  prompt_tokens_details?: { cached_tokens?: number } | null;
+}
+
+/** Cache hits as the provider reports them; 0 when it reports nothing (never assumed). */
+function cachedTokens(u: Usage | undefined): number {
+  return u?.prompt_cache_hit_tokens ?? u?.prompt_tokens_details?.cached_tokens ?? 0;
 }
 
 interface ChatRequest {

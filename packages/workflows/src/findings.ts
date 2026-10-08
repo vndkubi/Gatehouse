@@ -40,6 +40,9 @@ export interface Finding extends RawFinding {
   inDiff: boolean;
   notes: string[];
   mergedFrom?: string[];
+  /** Audit arms (design 09): how verification ended, and the checklist items this root cause breaks. */
+  status?: 'confirmed' | 'confirmed-preexisting' | 'unconfirmed' | 'withdrawn' | 'blocked' | 'explained' | 'not-verified';
+  items?: string[];
 }
 
 export interface CriticVerdict {

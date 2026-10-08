@@ -2,10 +2,11 @@ import { StepRunner } from '@gatehouse/engine';
 import { loadWorkflow } from '@gatehouse/workflows';
 import type { Runtime } from './runtime.ts';
 
+/** The workflow definition a run follows (a PR review with an arm follows pr-review-audit). */
 function workflowOf(rt: Runtime, runId: string): string {
-  const started = rt.events.list(runId).find((e) => e.type === 'RUN_STARTED')?.payload as { workflow?: string } | undefined;
+  const started = rt.events.list(runId).find((e) => e.type === 'RUN_STARTED')?.payload as { workflow?: string; arm?: string } | undefined;
   if (!started?.workflow) throw new Error(`no run ${runId}`);
-  return started.workflow;
+  return started.workflow === 'pr-review' && started.arm ? 'pr-review-audit' : started.workflow;
 }
 
 /** Steps from `stage` to the end of the workflow, in declared order. */

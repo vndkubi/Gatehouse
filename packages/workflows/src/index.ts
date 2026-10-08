@@ -16,3 +16,7 @@ export * from './ticket.ts';
 export * from './jacoco.ts';
 export * from './legacy.ts';
 export * from './compile.ts';
+export * from './audit.ts';
+export * from './audit-review.ts';
+export * from './context-pack.ts';
+export * from './arms.ts';

@@ -2,7 +2,7 @@ import { ConfigError, loadConfig } from '@gatehouse/core';
 import { scrubEnv, takeFingerprint, type HostFingerprint } from '@gatehouse/targets';
 import { envDetect, envVerify, repoAdd, repoFetch, repoList, repoRemove } from './onboard.ts';
 import { secretImportEnv, secretList, secretSet } from './secrets-cmd.ts';
-import { agentProbeCmd, runBranchReviewCmd, runListCmd, runPrReviewCmd, runResumeCmd, runShowCmd } from './run-cmd.ts';
+import { agentProbeCmd, runBranchReviewCmd, runReviewArmsCmd, runListCmd, runPrReviewCmd, runResumeCmd, runShowCmd } from './run-cmd.ts';
 import { approverEnrollCmd, publishCmd, serveCmd } from './console-cmd.ts';
 import { mcpInspectCmd } from './mcp-cmd.ts';
 import { evalStatsCmd, retroCmd, runAnswerCmd, runLegacyCmd, runRetryCmd, runTicketCmd } from './pipeline-cmd.ts';
@@ -37,8 +37,12 @@ Commands:
 
   agent probe        One tiny task per executor (Copilot via the gateway, Codex) to prove the wiring
 
-  run pr-review <repo> --pr N [--github owner/name] [--budget-tokens N] [--keep] [--no-critic]
-                     Review a pull request; stops at GATE_5 for your approval
+  run pr-review <repo> --pr N [--github owner/name] [--budget-tokens N] [--keep] [--no-critic] [--arm A|B|C]
+                     Review a pull request; stops at GATE_5 for your approval. --arm uses the
+                     batched-audit workflow: A agentic, B single pass, C single pass + investigation
+  run review-arms <repo> (--pr N | --head <ref> [--base <ref>]) [--arms A,B,C] [--budget-tokens N]
+                     Same change through several arms, then a measured comparison (tokens, calls,
+                     candidates, confirmed by test, not-checked items)
   run branch-review <repo> --head <ref> [--base <ref>] [--title t]
                      Review any two refs locally (self-review before opening a PR); nothing is posted
   run ticket <repo> --ticket KEY [--ticket-file path]
@@ -103,6 +107,7 @@ export async function main(argv: string[]): Promise<number> {
       case 'run':
         if (positional[0] === 'pr-review' && positional[1]) return await runPrReviewCmd(positional[1], flags);
         if (positional[0] === 'branch-review' && positional[1]) return await runBranchReviewCmd(positional[1], flags);
+        if (positional[0] === 'review-arms' && positional[1]) return await runReviewArmsCmd(positional[1], flags);
         if (positional[0] === 'ticket' && positional[1]) return await runTicketCmd(positional[1], flags);
         if (positional[0] === 'legacy-tests' && positional[1]) return await runLegacyCmd(positional[1], flags);
         if (positional[0] === 'answer' && positional[1]) return await runAnswerCmd(positional[1], flags);

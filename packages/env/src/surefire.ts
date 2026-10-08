@@ -10,6 +10,8 @@ export interface TestResult {
   status: TestStatus;
   /** Failure/error message and the start of its trace, for classifying why a test failed. */
   message?: string;
+  /** JUnit's distinction: `failure` = an assertion did not hold; `error` = an unexpected exception. */
+  failureKind?: 'failure' | 'error';
 }
 
 const SKIP = new Set(['.git', 'node_modules', 'src', '.mvn', '.idea']);
@@ -57,8 +59,9 @@ export function parseSurefireXml(xml: string): TestResult[] {
     const status: TestStatus = /<(failure|error)\b/.test(body) ? 'failed' : /<skipped\b/.test(body) ? 'skipped' : 'passed';
     const result: TestResult = { id: `${decode(className)}#${decode(name)}`, className: decode(className), status };
     if (status === 'failed') {
-      const f = /<(?:failure|error)\b([^>]*)>?([\s\S]{0,600})/.exec(body);
-      result.message = decode(`${/\bmessage="([^"]*)"/.exec(f?.[1] ?? '')?.[1] ?? ''} ${f?.[2] ?? ''}`.trim());
+      const f = /<(failure|error)\b([^>]*)>?([\s\S]{0,600})/.exec(body);
+      result.failureKind = f?.[1] === 'error' ? 'error' : 'failure';
+      result.message = decode(`${/\bmessage="([^"]*)"/.exec(f?.[2] ?? '')?.[1] ?? ''} ${f?.[3] ?? ''}`.trim());
     }
     out.push(result);
   }

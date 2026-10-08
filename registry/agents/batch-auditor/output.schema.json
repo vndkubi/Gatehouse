@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["item_id", "verdict", "evidence", "rationale", "missing_context", "cross_service", "requirement_issue", "candidate"],
+        "properties": {
+          "item_id": { "type": "string" },
+          "verdict": { "enum": ["pass", "fail", "not_applicable", "cannot_determine"] },
+          "evidence": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["file", "line", "quote"],
+              "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "quote": { "type": "string" } }
+            }
+          },
+          "rationale": { "type": "string", "maxLength": 800 },
+          "missing_context": {
+            "type": "array",
+            "maxItems": 5,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["need", "question", "lookup"],
+              "properties": {
+                "need": { "enum": ["contract", "owner", "config", "caller", "callee", "schema", "policy", "test", "other"] },
+                "question": { "type": "string" },
+                "lookup": { "type": "array", "maxItems": 5, "items": { "type": "string" } }
+              }
+            }
+          },
+          "cross_service": { "enum": ["none", "affected", "unknown"] },
+          "requirement_issue": { "anyOf": [{ "type": "null" }, { "type": "string" }] },
+          "candidate": {
+            "anyOf": [
+              { "type": "null" },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["title", "severity", "class", "category", "invariant", "entry_point", "cause", "failing_scenario"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "severity": { "enum": ["P1", "P2", "P3", "P4"] },
+                  "class": { "enum": ["business", "technical", "convention"] },
+                  "category": { "type": "string" },
+                  "invariant": { "type": "string" },
+                  "entry_point": { "type": "string" },
+                  "cause": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["file", "line", "quote"],
+                    "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "quote": { "type": "string" } }
+                  },
+                  "failing_scenario": { "type": "string" }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -33,6 +33,7 @@
 | 6 | [06-pci-dss.md](06-pci-dss.md) | PCI-DSS v4.0.1: clean room, DLP, ma trận `pci.scope`, LLM provider là TPSP, map requirement → control, các điểm cần QSA xác nhận |
 | 7 | [07-environment-synthesis.md](07-environment-synthesis.md) | Tự dựng môi trường build/test từ repo của user: detect (CI, devcontainer, manifest) → `env.yaml` → image theo lớp → verify L0–L3 → Env Doctor → GATE_ENV |
 | 8 | [08-delivery-host-then-sandbox.md](08-delivery-host-then-sandbox.md) | Thứ tự giao hàng: **Version A host mode** (dùng toolchain có sẵn trên máy) trước, **Version B sandbox** (máy mới) sau; ước lượng thời gian, parity check |
+| 9 | [09-batched-audit.md](09-batched-audit.md) | PR review theo batch, chứng minh sau: item có verdict, context pack có boundary signal, điều tra khi thiếu context, gộp theo nguyên nhân, verify bằng test; thử nghiệm A/B/C |
 
 ## Quyết định đã chốt (06/10/2026)
 

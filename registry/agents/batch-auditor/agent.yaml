@@ -1,0 +1,12 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+# Single-pass (design 09): no tools, no loop. Gatehouse composes the user message in cache
+# order (requirements + item catalog, then the region's context pack, then the batch), so this
+# prompt has no inputs and is byte-identical in every call.
+name: batch-auditor
+role: Gives a cited verdict for each checklist item in a batch, from a fixed context pack
+pattern: single-pass-audit
+executor: reviewer
+tier: tier-workhorse
+scope: none
+inputs: []
+output: output.schema.json

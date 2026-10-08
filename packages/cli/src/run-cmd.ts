@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { adapters, openRuntime, resumeJob, reviewJob, reviewStart, startGateway, type JobOutcome } from '@gatehouse/app';
+import { adapters, openRuntime, resumeJob, reviewArmsJob, reviewJob, reviewStart, startGateway, type JobOutcome } from '@gatehouse/app';
+import type { ReviewArm } from '@gatehouse/workflows';
 import type { AgentTask } from '@gatehouse/harness';
 
 const out = (s = '') => process.stdout.write(`${s}\n`);
@@ -25,9 +26,40 @@ export async function runPrReviewCmd(repoName: string, flags: Record<string, str
       github: typeof flags.github === 'string' ? flags.github : undefined,
       critic: !flags['no-critic'],
       budgetTokens: typeof flags['budget-tokens'] === 'string' ? Number(flags['budget-tokens']) : undefined,
+      arm: typeof flags.arm === 'string' ? (flags.arm.toUpperCase() as ReviewArm) : undefined,
     });
     out(`Reviewing ${start.source.kind === 'pr' ? `${start.source.owner}/${start.source.repoName}#${start.source.number}` : start.source.label}`);
     return report(await reviewJob(rt, start, out, undefined, Boolean(flags.keep)));
+  } finally {
+    rt.close();
+  }
+}
+
+/** Same PR through review arms A/B/C, then a measured comparison (design 09 §5). */
+export async function runReviewArmsCmd(repoName: string, flags: Record<string, string | boolean>): Promise<number> {
+  const rt = openRuntime();
+  try {
+    const arms = String(typeof flags.arms === 'string' ? flags.arms : 'A,B,C')
+      .split(',')
+      .map((a) => a.trim().toUpperCase())
+      .filter(Boolean) as ReviewArm[];
+    if (!arms.length || arms.some((a) => !['A', 'B', 'C'].includes(a))) throw new Error('--arms takes a comma-separated subset of A,B,C');
+    const r = await reviewArmsJob(
+      rt,
+      {
+        repo: repoName,
+        arms,
+        pr: typeof flags.pr === 'string' ? Number(flags.pr) : undefined,
+        github: typeof flags.github === 'string' ? flags.github : undefined,
+        head: typeof flags.head === 'string' ? flags.head : undefined,
+        base: typeof flags.base === 'string' ? flags.base : undefined,
+        budgetTokens: typeof flags['budget-tokens'] === 'string' ? Number(flags['budget-tokens']) : undefined,
+      },
+      out,
+    );
+    for (const o of r.outcomes) out(`${o.runId}: ${o.status.toUpperCase()} ${o.message}`);
+    if (r.reportPath) out(`\nComparison: ${r.reportPath}`);
+    return r.outcomes.some((o) => o.status === 'failed' || o.status === 'denied') ? 1 : 0;
   } finally {
     rt.close();
   }

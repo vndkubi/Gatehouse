@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["found", "not_in_repo"],
+  "properties": {
+    "found": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "line", "quote", "answers"],
+        "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "quote": { "type": "string" }, "answers": { "type": "string" } }
+      }
+    },
+    "not_in_repo": { "type": "array", "items": { "type": "string" } }
+  }
+}

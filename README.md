@@ -19,6 +19,7 @@ Design: [`research/gatehouse-design/`](research/gatehouse-design/README.md). Del
 | Legacy tests: coverage inventory → triage → charters → characterization tests → measured coverage delta → GATE_4 | done |
 | IDE: Agent Spec compiler, slash commands for VS Code/Copilot, Codex, Claude Code, `gatehouse mcp serve` | done |
 | B: sandbox cells (Docker; runc/gVisor/Kata), cache warm-up, host↔cell parity, readiness check | done (runc verified; gVisor/Kata need installing) |
+| Batched-audit PR review (design 09): arms A/B/C, context packs, investigation, root-cause grouping, test-based verification, `run review-arms` comparison | built and tested with fake models; not yet measured on real PRs |
 
 ## Requirements
 
@@ -67,6 +68,8 @@ node bin/gatehouse.mjs repo add https://github.com/<owner>/<repo>.git
 node bin/gatehouse.mjs env verify <repo>                       # L2 + GATE_ENV enables tests
 node bin/gatehouse.mjs run pr-review <repo> --pr 12            # stops at GATE_5
 node bin/gatehouse.mjs run branch-review <repo> --head feature/x
+node bin/gatehouse.mjs run pr-review <repo> --pr 12 --arm C               # batched-audit workflow (design 09)
+node bin/gatehouse.mjs run review-arms <repo> --pr 12 --arms A,B,C       # same PR through each arm, then a measured comparison
 node bin/gatehouse.mjs run ticket <repo> --ticket SHOP-7 [--ticket-file t.md]
 node bin/gatehouse.mjs run legacy-tests <repo> [--package com.acme] [--top 3]
 node bin/gatehouse.mjs run answer <runId> --q Q1 --answer "..."
@@ -87,6 +90,15 @@ node bin/gatehouse.mjs eval stats
    A ledger checks that every hunk was covered.
 4. **citations** checks every `file:line` and quote against the code. **evidence** runs repro tests on the head and on the merge base (L2 and GATE_ENV only). **challenge** has Codex critique the P1/P2 findings. Code decides the outcome: a failing test outranks any argument.
 5. **synthesis** writes `SUMMARY.md` and `review.html`, then the run waits at **GATE_5**.
+
+**PR review, batched audit (`--arm`, design 09)**
+1. The same intake and plan as above. The review is then split into checkable items: per technical unit, `.tech` and `.conv`; acceptance criteria; Spec Kit checklists, scenarios and decision-table rows under `specs/<feature>/` touched by the PR; viewpoint checklist lines; seams.
+2. **audit** (arms B, C): one single-pass, schema-bound call per code region × lens. The prompt is ordered for prefix caching: requirements + item catalog, then the region's context pack (hunks, callers, service-boundary signals with the contracts/config the repo holds), then the batch. Each item gets `pass | fail | not_applicable | cannot_determine` with citations and what context was missing. The call asks for a verdict, not a fix. Arm A runs the agentic unit reviewers instead.
+3. **investigate** (arm C): items with missing context or unknown cross-service impact get a bounded lookup (repo search first, then a narrow read-only agent) and are asked again. High-risk items and a sample of passes get an independent second read. Whatever stays undecided is reported as unresolved, never as a pass.
+4. **group** merges candidates by root cause (cause location + violated rule). **verify** asks for one test per business/technical cause against a checkable source of the expected behaviour. A cause is confirmed only when an assertion fails on head; the merge base shows whether it is new. Convention issues are explained, not tested. **propose-fix** writes AS-IS/TO-BE only for what survived.
+5. `run review-arms` compares the arms from their events: candidates, confirmed/withdrawn/blocked, items not checked, tokens per phase (and provider cache hits), test runs, quota waits, wall clock.
+
+Provider quotas can be enforced in the gateway with `llm.providers.<name>.rateLimit: { rpm, tpm, countCachedTokens }`. Calls wait for room in a one-minute window shared by all runs on the machine.
 
 **Ticket → PR**
 1. The PBI must quote the ticket verbatim. Inferred criteria become open questions, and blocking questions stop the run until you answer.

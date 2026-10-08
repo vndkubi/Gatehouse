@@ -13,6 +13,8 @@ export interface ReproRun {
   outcome: ReproOutcome;
   reason: string;
   durationMs: number;
+  /** RED only: every failing case failed an assertion (not an unexpected exception). */
+  assertionsOnly?: boolean;
 }
 
 const FQN = /^[a-zA-Z_][\w]*(\.[a-zA-Z_][\w]*)*$/;
@@ -63,7 +65,7 @@ export async function runJavaRepro(
     if (cases.every((c) => c.status === 'skipped')) return done('INCONCLUSIVE', 'every test case was skipped');
     const failed = cases.filter((c) => c.status === 'failed');
     return failed.length
-      ? done('RED', `${failed.length}/${cases.length} test(s) failed: ${failed.map((c) => c.id.split('#')[1]).join(', ')}`)
+      ? { ...done('RED', `${failed.length}/${cases.length} test(s) failed: ${failed.map((c) => `${c.id.split('#')[1]}${c.failureKind === 'error' ? ' (error)' : ''}`).join(', ')}`), assertionsOnly: failed.every((c) => c.failureKind !== 'error') }
       : done('GREEN', `${cases.filter((c) => c.status === 'passed').length}/${cases.length} test(s) passed`);
   } finally {
     rmSync(file, { force: true });

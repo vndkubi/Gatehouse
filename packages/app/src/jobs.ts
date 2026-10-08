@@ -3,7 +3,10 @@ import { AwaitingGate, GateRejected } from '@gatehouse/gates';
 import { parseGitHubRemote } from '@gatehouse/github';
 import { detectFacts, renderSpec, synthesize, verifyEnv, type EnvLevel, type EnvSpec, type VerifyReport } from '@gatehouse/env';
 import { fetchMirror, resolveCommit, scrubEnv, takeFingerprint } from '@gatehouse/targets';
-import { StageBlocked, latestEnv, runPrReview, type PrReviewResult, type ReviewSource } from '@gatehouse/workflows';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { GatewayStructuredCaller } from '@gatehouse/harness';
+import { StageBlocked, armMetrics, compareArms, latestEnv, renderComparison, runPrReview, type ArmComparison, type PrReviewResult, type ReviewArm, type ReviewSource } from '@gatehouse/workflows';
 import { StepFailed } from '@gatehouse/engine';
 import { CellTarget } from './cell-target.ts';
 import { McpProxy } from '@gatehouse/mcp-proxy';
@@ -117,6 +120,8 @@ export interface ReviewOptions {
   keep?: boolean;
   /** Token budget for this run; defaults to llm.budgetTokensPerRun. */
   budgetTokens?: number;
+  /** Batched-audit workflow arm (design 09); omitted = the pr-review workflow. */
+  arm?: ReviewArm;
 }
 
 export interface ReviewStart {
@@ -125,6 +130,7 @@ export interface ReviewStart {
   source: ReviewSource;
   critic: boolean;
   budgetTokens?: number;
+  arm?: ReviewArm;
 }
 
 export function reviewStart(rt: Runtime, o: ReviewOptions): ReviewStart {
@@ -139,13 +145,15 @@ export function reviewStart(rt: Runtime, o: ReviewOptions): ReviewStart {
     source = { kind: 'refs', base: o.base ?? repo.defaultBranch, head: o.head, title: o.title ?? `Branch review ${o.head}`, body: o.body ?? '', label: `${o.repo}: ${o.base ?? repo.defaultBranch}...${o.head}` };
   }
   if (o.budgetTokens !== undefined && (!Number.isInteger(o.budgetTokens) || o.budgetTokens < 10_000)) throw new Error('budget must be a whole number of tokens, at least 10000');
-  return { workflow: 'pr-review', repo: o.repo, source, critic: o.critic !== false, ...(o.budgetTokens ? { budgetTokens: o.budgetTokens } : {}) };
+  if (o.arm !== undefined && !['A', 'B', 'C'].includes(o.arm)) throw new Error('arm must be A, B or C');
+  // The audit workflow has no critic step; keep Codex out of the PCI route check for it.
+  return { workflow: 'pr-review', repo: o.repo, source, critic: !o.arm && o.critic !== false, ...(o.budgetTokens ? { budgetTokens: o.budgetTokens } : {}), ...(o.arm ? { arm: o.arm } : {}) };
 }
 
 export async function reviewJob(rt: Runtime, start: ReviewStart, log: Log, runId?: string, keep = false): Promise<JobOutcome<PrReviewResult>> {
   // A caller may pick the id up front (the console links to the run before it starts); it is a resume only if the run exists.
   const resuming = !!runId && rt.events.list(runId).some((e) => e.type === 'RUN_STARTED');
-  const id = runId ?? runIdFor('prr', start.repo, start.source.kind === 'pr' ? start.source.number : 'branch');
+  const id = runId ?? runIdFor(start.arm ? `prr${start.arm.toLowerCase()}` : 'prr', start.repo, start.source.kind === 'pr' ? start.source.number : 'branch');
   const repo = mustRepo(rt, start.repo);
   const decision = canRunWorkflow({ workflow: 'pr-review', repo: repo.name, pciScope: repo.pciScope, routes: routesFor(rt, start.critic) });
   if (!decision.allow) {
@@ -174,13 +182,14 @@ export async function reviewJob(rt: Runtime, start: ReviewStart, log: Log, runId
         github,
         reviewer: copilot,
         critic: start.critic ? codex : null,
+        structured: new GatewayStructuredCaller({ gatewayUrl: url, signer: rt.signer }),
         usage: () => gateway.usageFor(id),
         budgetTokens: budget,
         fetchTicket: tickets?.fetch,
         envApproved: envApprovedFor(rt),
         log,
       },
-      { runId: id, source: start.source, keepWorkspaces: keep },
+      { runId: id, source: start.source, keepWorkspaces: keep, ...(start.arm ? { arm: start.arm } : {}) },
     );
     rt.events.append(id, 'RUN_USAGE', gateway.usageFor(id));
     const pr = start.source.kind === 'pr';
@@ -198,6 +207,37 @@ export async function reviewJob(rt: Runtime, start: ReviewStart, log: Log, runId
     await tickets?.close();
     await gateway.stop();
   }
+}
+
+// ---- Review arms experiment (design 09 §5) ---------------------------------------------------
+
+/**
+ * Runs the same PR (frozen at the same head) through several review arms one after another,
+ * then compares what each found, confirmed and spent. Arms run sequentially so they do not
+ * compete for the provider quota and their wall-clock times stay comparable.
+ */
+export async function reviewArmsJob(rt: Runtime, o: ReviewOptions & { arms: ReviewArm[] }, log: Log): Promise<{ outcomes: JobOutcome<PrReviewResult>[]; comparison: ArmComparison | null; reportPath: string | null }> {
+  const outcomes: JobOutcome<PrReviewResult>[] = [];
+  let head: string | null = null;
+  for (const arm of o.arms) {
+    const start = reviewStart(rt, { ...o, arm });
+    log(`\n== arm ${arm} ==`);
+    const outcome = await reviewJob(rt, start, log);
+    outcomes.push(outcome);
+    const frozen = rt.events.list(outcome.runId).find((e) => e.type === 'STEP_DONE' && (e.payload as { stepId: string }).stepId === 'freeze');
+    const h = (frozen?.payload as { result?: { head?: string } } | undefined)?.result?.head ?? null;
+    if (head && h && h !== head) log(`warning: the PR head moved between arms (${head.slice(0, 10)} → ${h.slice(0, 10)}); the comparison is not like for like`);
+    head ??= h;
+  }
+  const finished = outcomes.filter((x) => x.status === 'awaiting-gate' || x.status === 'done');
+  if (!finished.length) return { outcomes, comparison: null, reportPath: null };
+  const comparison = compareArms(finished.map((x) => armMetrics(rt.events, rt.artifacts, x.runId)));
+  const dir = join(rt.paths.home, 'experiments', runIdFor('arms', o.repo, o.pr ?? 'branch'));
+  mkdirSync(dir, { recursive: true });
+  const reportPath = join(dir, 'arms.md');
+  writeFileSync(reportPath, renderComparison(comparison));
+  writeFileSync(join(dir, 'arms.json'), JSON.stringify(comparison, null, 2));
+  return { outcomes, comparison, reportPath };
 }
 
 // ---- MCP ticket lookup --------------------------------------------------------------------------

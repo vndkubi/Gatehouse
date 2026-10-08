@@ -1,0 +1,15 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["as_is", "to_be", "explanation"],
+  "properties": {
+    "as_is": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "line", "quote"],
+      "properties": { "file": { "type": "string" }, "line": { "type": "integer" }, "quote": { "type": "string" } }
+    },
+    "to_be": { "type": "string" },
+    "explanation": { "type": "string" }
+  }
+}

@@ -1,0 +1,9 @@
+# Neutral Agent Spec (design 02): compiled per executor by `gatehouse agents compile`.
+name: context-investigator
+role: Finds the contract, owner or config an audit item was missing, and nothing else
+pattern: narrow-lookup
+executor: reviewer
+tier: tier-workhorse
+scope: read-repo
+inputs: [item, questions]
+output: output.schema.json

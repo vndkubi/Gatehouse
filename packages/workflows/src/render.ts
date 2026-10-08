@@ -1,4 +1,5 @@
 import { postable, type Finding } from './findings.ts';
+import type { AuditSummary } from './audit-review.ts';
 import type { ReviewPackage } from './package.ts';
 
 export const EVIDENCE_LABEL: Record<Finding['evidence'], string> = {
@@ -22,6 +23,7 @@ export function findingMarkdown(f: Finding, withNotes = true): string {
     `- Suggested fix: ${f.suggested_fix}`,
     `- Evidence: ${EVIDENCE_LABEL[f.evidence]}`,
   ];
+  if (f.items?.length) lines.push(`- Breaks: ${f.items.join(', ')}`);
   if (withNotes) for (const n of f.notes) lines.push(`- Note: ${n}`);
   if (f.mergedFrom?.length) lines.push(`- Also reported as ${f.mergedFrom.join(', ')}`);
   return lines.join('\n');
@@ -87,9 +89,50 @@ export function renderSummary(pkg: ReviewPackage): string {
     out.push('## What the change says it does (read in quarantine)', '', pkg.requirements.summary, '');
     if (pkg.requirements.open_questions.length) out.push('**Open questions**', ...pkg.requirements.open_questions.map((q) => `- ${q}`), '');
   }
+  if (pkg.audit) out.push(...auditMarkdown(pkg.audit));
   if (pkg.masked.length) out.push('## Agent instruction files hidden from reviewers', ...pkg.masked.map((m) => `- \`${m}\``), '');
   if (pkg.unreviewable.length) out.push('## Not reviewable', ...pkg.unreviewable.map((m) => `- ${m}`), '');
   return out.join('\n');
+}
+
+const ITEM_LABEL: Record<string, string> = {
+  pass: '✅ pass',
+  fail: '❌ fail',
+  not_applicable: '➖ not applicable',
+  cannot_determine: '❔ not checked (context missing)',
+  unresolved: '❔ unresolved after investigation',
+  not_run: '⛔ not audited',
+};
+
+/** Per-item verdicts. "Not checked" and "unresolved" are listed apart from passes: missing evidence is not a pass. */
+export function auditMarkdown(a: AuditSummary): string[] {
+  const out = [`## Checklist audit — arm ${a.arm} (${a.armLabel})`, ''];
+  out.push(
+    Object.entries(a.counts)
+      .map(([k, n]) => `${ITEM_LABEL[k] ?? k}: ${n}`)
+      .join(' · '),
+    `Candidates: ${a.candidates.total} (${a.candidates.citationRejected} with a citation that did not match the code), ${a.candidates.groups} root cause(s).`,
+    `Single-pass calls: ${a.structuredCalls.count} (${a.structuredCalls.failed} failed), ${a.structuredCalls.promptTokens} prompt tokens of which ${a.structuredCalls.cachedPromptTokens} served from the provider cache, ${a.structuredCalls.completionTokens} completion tokens.`,
+    '',
+  );
+  const open = a.items.filter((i) => ['cannot_determine', 'unresolved', 'not_run'].includes(i.status));
+  if (open.length) {
+    out.push('### Not checked — needs context or a person', '');
+    for (const i of open) out.push(`- **${i.id}** ${ITEM_LABEL[i.status]}${i.mandatory ? ' (mandatory)' : ''} — ${i.text}${i.missing.length ? `\n  - missing: ${i.missing.join('; ')}` : ''}${i.notes.length ? `\n  - ${i.notes.slice(-2).join('; ')}` : ''}`);
+    out.push('');
+  }
+  if (a.requirementIssues.length) {
+    out.push('### Requirement issues (for the spec owner, not code findings)', '', ...a.requirementIssues.map((r) => `- **${r.item}**: ${r.issue}`), '');
+  }
+  if (a.investigations.length) {
+    out.push('### Investigations', '');
+    for (const v of a.investigations) out.push(`- ${v.item} (${v.reasons.join(', ')}): ${v.kind}, ${v.before} → ${v.after}${v.snippets ? `, ${v.snippets} snippet(s) read` : ''}${v.notInRepo.length ? `; not in repo: ${v.notInRepo.slice(0, 3).join('; ')}` : ''}`);
+    out.push('');
+  }
+  out.push('### All items', '', '| Item | Kind | Result | Passes |', '|---|---|---|---|');
+  for (const i of a.items) out.push(`| ${i.id} | ${i.kind} | ${ITEM_LABEL[i.status] ?? i.status} | ${i.history.join(' → ')} |`);
+  out.push('');
+  return out;
 }
 
 export function escapeHtml(s: string): string {
@@ -128,6 +171,9 @@ ${pkg.warnings.map((w) => `<p class="meta">⚠ ${e(w)}</p>`).join('')}
 ${acs ? `<h2>Acceptance criteria</h2><table><thead><tr><th>AC</th><th>Status</th><th>Criterion</th><th>Note</th></tr></thead><tbody>${acs}</tbody></table>` : ''}
 ${pkg.orphans.length ? `<h2>Changes no criterion explains</h2><p>${e(pkg.orphans.join(', '))}</p>` : ''}
 ${pkg.blast.dependentFiles.length || pkg.blast.testsAtRisk.length ? `<h2>Blast radius</h2><p class="meta">Dependent: ${e(pkg.blast.dependentFiles.join(', ') || 'none')}</p><p class="meta">Tests at risk: ${e(pkg.blast.testsAtRisk.join(', ') || 'none')}</p>` : ''}
+${pkg.audit ? `<h2>Checklist audit — arm ${e(pkg.audit.arm)}</h2><p class="meta">${e(pkg.audit.armLabel)}</p><table><thead><tr><th>Item</th><th>Kind</th><th>Result</th><th>Passes</th><th>Missing / notes</th></tr></thead><tbody>${pkg.audit.items
+  .map((i) => `<tr class="${i.status === 'pass' || i.status === 'not_applicable' ? '' : 'warn'}"><td>${e(i.id)}</td><td>${e(i.kind)}</td><td>${e(ITEM_LABEL[i.status] ?? i.status)}</td><td>${e(i.history.join(' → '))}</td><td class="meta">${e([...i.missing, ...i.notes.slice(-2)].join('; '))}</td></tr>`)
+  .join('')}</tbody></table>${pkg.audit.requirementIssues.length ? `<h2>Requirement issues</h2>${pkg.audit.requirementIssues.map((r) => `<p><b>${e(r.item)}</b>: ${e(r.issue)}</p>`).join('')}` : ''}` : ''}
 <h2>Review units</h2><table><thead><tr><th>Unit</th><th>Kind</th><th>Files</th><th>Hunks</th><th>Status</th></tr></thead><tbody>${units}</tbody></table>
 ${pkg.masked.length ? `<h2>Agent instruction files hidden from reviewers</h2><p class="meta">${e(pkg.masked.join(', '))}</p>` : ''}
 <p class="meta">Run ${e(pkg.runId)} · generated by Gatehouse</p>

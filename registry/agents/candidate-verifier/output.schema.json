@@ -1,0 +1,32 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["expected_source", "reachability", "test", "blocked_reason"],
+  "properties": {
+    "expected_source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "ref", "file", "line", "quote"],
+      "properties": {
+        "kind": { "enum": ["requirement", "rule", "contract", "code", "none"] },
+        "ref": { "anyOf": [{ "type": "null" }, { "type": "string" }] },
+        "file": { "anyOf": [{ "type": "null" }, { "type": "string" }] },
+        "line": { "anyOf": [{ "type": "null" }, { "type": "integer" }] },
+        "quote": { "anyOf": [{ "type": "null" }, { "type": "string" }] }
+      }
+    },
+    "reachability": { "type": "string" },
+    "test": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["test_class", "test_source"],
+          "properties": { "test_class": { "type": "string" }, "test_source": { "type": "string" } }
+        }
+      ]
+    },
+    "blocked_reason": { "anyOf": [{ "type": "null" }, { "type": "string" }] }
+  }
+}
